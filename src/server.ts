@@ -457,6 +457,21 @@ export function createServer(nodeUrl: string): WdkMcpServer {
   )
 
   // -----------------------------------------------------------------------
+  // Tool: wdk_connect_peer
+  // -----------------------------------------------------------------------
+  server.tool(
+    'wdk_connect_peer',
+    'Connect the RLN node to a Lightning peer. Required before requesting an LSPS1 channel from the KaleidoSwap LSP — call this first if the LSP is not already a connected peer. Format: "<pubkey>@<host>:<port>".',
+    {
+      peer_pubkey_and_addr: z.string().describe('Peer connection string in format pubkey@host:port'),
+    },
+    async ({ peer_pubkey_and_addr }) => {
+      await rln.connectPeer(peer_pubkey_and_addr)
+      return text(JSON.stringify({ success: true, note: `Connected to ${peer_pubkey_and_addr}` }, null, 2))
+    }
+  )
+
+  // -----------------------------------------------------------------------
   // Tool: wdk_atomic_taker
   // -----------------------------------------------------------------------
   server.tool(

@@ -223,6 +223,10 @@ export class RlnClient {
     return this.request<{ fee_rate: number }>('POST', '/estimatefee', { blocks })
   }
 
+  async connectPeer(pubkeyAndAddr: string): Promise<void> {
+    await this.request('POST', '/connectpeer', { peer_pubkey_and_addr: pubkeyAndAddr })
+  }
+
   async atomicTaker(swapstring: string): Promise<void> {
     await this.request('POST', '/taker', { swapstring })
   }
