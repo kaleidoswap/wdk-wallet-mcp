@@ -227,8 +227,8 @@ export class RlnClient {
     await this.request('POST', '/taker', { swapstring })
   }
 
-  async listSwaps(): Promise<{ swaps: Swap[] }> {
-    return this.request<{ swaps: Swap[] }>('GET', '/listswaps')
+  async listSwaps(): Promise<{ maker: Swap[]; taker: Swap[] }> {
+    return this.request<{ maker: Swap[]; taker: Swap[] }>('GET', '/listswaps')
   }
 
   async getSwap(paymentHash: string, taker?: boolean): Promise<{ swap?: Swap }> {

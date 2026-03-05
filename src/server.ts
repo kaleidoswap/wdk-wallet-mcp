@@ -476,11 +476,15 @@ export function createServer(nodeUrl: string): WdkMcpServer {
   // -----------------------------------------------------------------------
   server.tool(
     'wdk_list_swaps',
-    'List all atomic swaps on the RLN node. Returns payment_hash, status, and direction for each swap. Useful for monitoring active and historical atomic swap activity.',
+    'List all atomic swaps on the RLN node, split by maker and taker side. Useful for monitoring active and historical atomic swap activity.',
     {},
     async () => {
       const result = await rln.listSwaps()
-      return text(JSON.stringify(result, null, 2))
+      return text(JSON.stringify({
+        maker: result.maker ?? [],
+        taker: result.taker ?? [],
+        total: (result.maker?.length ?? 0) + (result.taker?.length ?? 0),
+      }, null, 2))
     }
   )
 
