@@ -5,7 +5,7 @@ import { RlnClient, type Swap } from './rln-client.js'
 export function createServer(nodeUrl: string): WdkMcpServer {
   const rln = new RlnClient(nodeUrl)
 
-  const server = new WdkMcpServer('wdk-wallet', '1.0.0')
+  const server = new WdkMcpServer('wdk-wallet-rln', '1.0.0')
 
   // -----------------------------------------------------------------------
   // Tool: wdk_get_node_info
@@ -516,6 +516,58 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     async ({ payment_hash, taker }) => {
       const result = await rln.getSwap(payment_hash, taker)
       return text(JSON.stringify(result, null, 2))
+    }
+  )
+
+  // -----------------------------------------------------------------------
+  // Tool: wdk_mpp_pay
+  // -----------------------------------------------------------------------
+  server.tool(
+    'wdk_mpp_pay',
+    'Pay an MPP (Machine Payments Protocol) Lightning challenge using the RLN wallet. Pass the invoice from mpp_request_challenge. Returns a credential JSON string to pass directly to mpp_submit_credential. Also returns the payment_hash for auditing. Supports optional macaroon and challenge_id fields from the challenge for L402-compatible credential construction.',
+    {
+      invoice: z
+        .string()
+        .describe('BOLT11 Lightning invoice from the MPP challenge (from mpp_request_challenge)'),
+      challenge_id: z
+        .string()
+        .optional()
+        .describe('MPP challenge_id from mpp_request_challenge (included in credential for server verification)'),
+      macaroon: z
+        .string()
+        .optional()
+        .describe('Macaroon from mpp_request_challenge (required for L402-compatible servers)'),
+    },
+    async ({ invoice, challenge_id, macaroon }) => {
+      // Pay the Lightning invoice
+      const result = await rln.sendPayment(invoice)
+
+      // Attempt to extract preimage: RLN may return it as payment_secret
+      // (Lightning preimage is also called "payment secret" in some implementations)
+      const preimage = (result as Record<string, unknown>).payment_preimage as string | undefined
+        ?? (result as Record<string, unknown>).payment_secret as string | undefined
+
+      // Build MPP credential — works with or without preimage
+      const credential: Record<string, string> = { method: 'lightning' }
+      if (challenge_id) credential.challenge_id = challenge_id
+      if (preimage) credential.preimage = preimage
+      if (macaroon) credential.macaroon = macaroon
+
+      return text(
+        JSON.stringify(
+          {
+            paid: true,
+            payment_hash: result.payment_hash ?? null,
+            preimage: preimage ?? null,
+            credential: JSON.stringify(credential),
+            note: preimage
+              ? 'Credential ready — pass to mpp_submit_credential'
+              : 'Payment sent but preimage not returned by node. Some MPP servers accept payment_hash as proof — include it manually if needed.',
+          },
+          null,
+          2
+        )
+      )
     }
   )
 

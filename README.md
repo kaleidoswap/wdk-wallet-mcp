@@ -1,4 +1,4 @@
-# wdk-wallet-mcp
+# wdk-wallet-rln-mcp
 
 MCP server that exposes an [RGB Lightning Node (RLN)](https://github.com/RGB-Tools/rgb-lightning-node) wallet to AI agents via the [Model Context Protocol](https://modelcontextprotocol.io).
 
@@ -80,7 +80,7 @@ RLN_NODE_URL=http://localhost:3001 node dist/index.js
   "mcpServers": {
     "wdk_wallet": {
       "command": "node",
-      "args": ["/path/to/wdk-wallet-mcp/dist/index.js"],
+      "args": ["/path/to/wdk-wallet-rln-mcp/dist/index.js"],
       "env": {
         "RLN_NODE_URL": "http://localhost:3001"
       }
