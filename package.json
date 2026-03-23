@@ -22,7 +22,7 @@
     "test": "npm run test:contract"
   },
   "dependencies": {
-    "@kaleidorg/wdk-wallet-rln": "file:../wdk-wallet-rln",
+    "@kaleidorg/wdk-wallet-rln": "^1.0.0-beta.2",
     "@modelcontextprotocol/sdk": "^1.10.1",
     "zod": "^3.24.2"
   },
