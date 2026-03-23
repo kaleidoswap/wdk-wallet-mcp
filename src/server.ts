@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { RlnAccount } from '@kaleidoswap/wdk-wallet-rln'
+import { RlnAccount } from '@kaleidorg/wdk-wallet-rln'
 
 export function createServer(nodeUrl: string): McpServer {
   const account = new (RlnAccount as any)(nodeUrl)
