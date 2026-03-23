@@ -1,11 +1,14 @@
-import { WdkMcpServer } from '@tetherto/wdk-mcp-toolkit'
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { RlnClient, type Swap } from './rln-client.js'
+import { RlnAccount } from '@kaleidoswap/wdk-wallet-rln'
 
-export function createServer(nodeUrl: string): WdkMcpServer {
-  const rln = new RlnClient(nodeUrl)
+export function createServer(nodeUrl: string): McpServer {
+  const account = new (RlnAccount as any)(nodeUrl)
 
-  const server = new WdkMcpServer('wdk-wallet-rln', '1.0.0')
+  const server = new McpServer({
+    name: 'wdk-wallet-rln',
+    version: '1.1.0',
+  })
 
   // -----------------------------------------------------------------------
   // Tool: wdk_get_node_info
@@ -15,7 +18,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     'Get the RLN node identity and network summary: pubkey, number of channels, Lightning balance, connected peers. Call this first to confirm the node is reachable.',
     {},
     async () => {
-      const info = await rln.getNodeInfo()
+      const info = await account.getNodeInfo()
       return text(JSON.stringify(info, null, 2))
     }
   )
@@ -34,8 +37,8 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     },
     async ({ skip_sync = false }) => {
       const [btc, nodeInfo] = await Promise.all([
-        rln.getBtcBalance(skip_sync),
-        rln.getNodeInfo(),
+        account.getBtcBalance({ skipSync: skip_sync }),
+        account.getNodeInfo(),
       ])
 
       return text(
@@ -68,7 +71,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe("RGB asset ID, e.g. 'rgb:2JEUOrsc-JsWuPGF-3cr9SSv-mqqRmaz-8waf0gl-8vAcOXw'"),
     },
     async ({ asset_id }) => {
-      const balance = await rln.getAssetBalance(asset_id)
+      const balance = await account.getAssetBalance(asset_id)
       return text(JSON.stringify({ asset_id, ...balance }, null, 2))
     }
   )
@@ -86,11 +89,11 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe("Filter by asset schema. Omit to return all. Options: 'Nia', 'Uda', 'Cfa'"),
     },
     async ({ schemas = [] }) => {
-      const assets = await rln.listAssets(schemas)
+      const assets = await account.listAssets(schemas)
       const all = [
-        ...(assets.nia ?? []).map((a) => ({ ...a, schema: 'Nia' })),
-        ...(assets.uda ?? []).map((a) => ({ ...a, schema: 'Uda' })),
-        ...(assets.cfa ?? []).map((a) => ({ ...a, schema: 'Cfa' })),
+        ...(assets.nia ?? []).map((a: any) => ({ ...a, schema: 'Nia' })),
+        ...(assets.uda ?? []).map((a: any) => ({ ...a, schema: 'Uda' })),
+        ...(assets.cfa ?? []).map((a: any) => ({ ...a, schema: 'Cfa' })),
       ]
       return text(JSON.stringify(all, null, 2))
     }
@@ -104,8 +107,8 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     'Get the node on-chain BTC address for receiving Bitcoin deposits.',
     {},
     async () => {
-      const res = await rln.getAddress()
-      return text(JSON.stringify(res, null, 2))
+      const address = await account.getAddress()
+      return text(JSON.stringify({ address }, null, 2))
     }
   )
 
@@ -133,7 +136,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Invoice expiry in seconds (default: 86400 = 24h)'),
     },
     async ({ asset_id, amount, duration_seconds }) => {
-      const invoice = await rln.createRgbInvoice({
+      const invoice = await account.createRgbInvoice({
         assetId: asset_id,
         amount,
         durationSeconds: duration_seconds,
@@ -180,7 +183,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Invoice expiry in seconds (default: 3600)'),
     },
     async ({ amount_msat, description, expiry_sec }) => {
-      const inv = await rln.createLnInvoice({
+      const inv = await account.createLNInvoice({
         amtMsat: amount_msat,
         description,
         expirySec: expiry_sec,
@@ -201,7 +204,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('BOLT11 Lightning invoice string (starts with lnbc... or lntb...)'),
     },
     async ({ invoice }) => {
-      const result = await rln.sendPayment(invoice)
+      const result = await account.sendPayment({ invoice })
       return text(JSON.stringify(result, null, 2))
     }
   )
@@ -222,7 +225,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Fee rate in sat/vbyte (default: 3)'),
     },
     async ({ address, amount_sat, fee_rate = 3 }) => {
-      await rln.sendBtc(address, amount_sat, fee_rate)
+      await account.sendBtc({ address, amount: amount_sat, feeRate: fee_rate })
       return text(
         JSON.stringify({ sent: true, address, amount_sat, fee_rate }, null, 2)
       )
@@ -258,21 +261,26 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     },
     async ({ asset_id, recipient_id, amount, transport_endpoints, fee_rate }) => {
       // Resolve precision for the asset
-      const assets = await rln.listAssets([])
+      const assets = await account.listAssets([])
       const all = [
         ...(assets.nia ?? []),
         ...(assets.uda ?? []),
         ...(assets.cfa ?? []),
       ]
-      const asset = all.find((a) => a.asset_id === asset_id)
+      const asset = all.find((a: any) => a.asset_id === asset_id)
       const precision = asset?.precision ?? 0
       const rawAmount = Math.round(amount * Math.pow(10, precision))
 
-      const result = await rln.sendAsset({
-        assetId: asset_id,
-        recipientId: recipient_id,
-        amount: rawAmount,
-        transportEndpoints: transport_endpoints,
+      const result = await account.sendRgb({
+        recipientMap: {
+          [asset_id]: [
+            {
+              recipient_id,
+              assignment: { amount: rawAmount },
+              transport_endpoints: transport_endpoints ?? [],
+            },
+          ],
+        },
         feeRate: fee_rate,
       })
       return text(
@@ -305,12 +313,12 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Return only channels that are ready and usable (default: false)'),
     },
     async ({ usable_only = false }) => {
-      const res = await rln.listChannels()
+      const res = await account.listChannels()
       const channels = usable_only
-        ? (res.channels ?? []).filter((c) => c.is_usable)
+        ? (res.channels ?? []).filter((c: any) => c.is_usable)
         : (res.channels ?? [])
 
-      const summary = channels.map((c) => ({
+      const summary = channels.map((c: any) => ({
         channel_id: c.channel_id,
         peer_pubkey: c.peer_pubkey,
         status: c.status,
@@ -325,11 +333,11 @@ export function createServer(nodeUrl: string): WdkMcpServer {
       }))
 
       const totalOutbound = channels.reduce(
-        (s, c) => s + (c.outbound_balance_msat ?? 0),
+        (s: number, c: any) => s + (c.outbound_balance_msat ?? 0),
         0
       )
       const totalInbound = channels.reduce(
-        (s, c) => s + (c.inbound_balance_msat ?? 0),
+        (s: number, c: any) => s + (c.inbound_balance_msat ?? 0),
         0
       )
 
@@ -383,7 +391,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Whether to announce the channel publicly (default: false)'),
     },
     async ({ peer_pubkey_and_addr, capacity_sat, push_msat, asset_id, asset_amount, is_public }) => {
-      const result = await rln.openChannel({
+      const result = await account.openChannel({
         peerPubkeyAndAddr: peer_pubkey_and_addr,
         capacitySat: capacity_sat,
         pushMsat: push_msat,
@@ -422,11 +430,11 @@ export function createServer(nodeUrl: string): WdkMcpServer {
       outbound_only: z.boolean().optional().describe('Show only sent payments'),
     },
     async ({ limit = 20, inbound_only, outbound_only }) => {
-      const res = await rln.listPayments()
+      const res = await account.listPayments()
       let payments = res.payments ?? []
 
-      if (inbound_only) payments = payments.filter((p) => p.inbound)
-      if (outbound_only) payments = payments.filter((p) => !p.inbound)
+      if (inbound_only) payments = payments.filter((p: any) => p.inbound)
+      if (outbound_only) payments = payments.filter((p: any) => !p.inbound)
 
       return text(JSON.stringify(payments.slice(0, limit), null, 2))
     }
@@ -445,7 +453,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
         .describe('Skip blockchain sync (default: false)'),
     },
     async ({ skip_sync = false }) => {
-      await rln.refreshTransfers(skip_sync)
+      await account.refreshTransfers({ skipSync: skip_sync })
       return text(
         JSON.stringify(
           { refreshed: true, note: 'Call wdk_get_asset_balance to check updated balance' },
@@ -466,7 +474,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
       peer_pubkey_and_addr: z.string().describe('Peer connection string in format pubkey@host:port'),
     },
     async ({ peer_pubkey_and_addr }) => {
-      await rln.connectPeer(peer_pubkey_and_addr)
+      await account.connectPeer(peer_pubkey_and_addr)
       return text(JSON.stringify({ success: true, note: `Connected to ${peer_pubkey_and_addr}` }, null, 2))
     }
   )
@@ -481,7 +489,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
       swapstring: z.string().describe('Swapstring from kaleidoswap_atomic_init'),
     },
     async ({ swapstring }) => {
-      await rln.atomicTaker(swapstring)
+      await account.atomicTaker(swapstring)
       return text(JSON.stringify({ success: true, note: 'HTLC whitelisted — now call wdk_get_node_info for pubkey, then kaleidoswap_atomic_execute' }, null, 2))
     }
   )
@@ -494,7 +502,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     'List all atomic swaps on the RLN node, split by maker and taker side. Useful for monitoring active and historical atomic swap activity.',
     {},
     async () => {
-      const result = await rln.listSwaps()
+      const result = await account.listSwaps()
       return text(JSON.stringify({
         maker: result.maker ?? [],
         taker: result.taker ?? [],
@@ -514,7 +522,7 @@ export function createServer(nodeUrl: string): WdkMcpServer {
       taker: z.boolean().optional().describe('Filter for taker-side swap (default: both)'),
     },
     async ({ payment_hash, taker }) => {
-      const result = await rln.getSwap(payment_hash, taker)
+      const result = await account.getSwap({ paymentHash: payment_hash, taker })
       return text(JSON.stringify(result, null, 2))
     }
   )
@@ -540,14 +548,12 @@ export function createServer(nodeUrl: string): WdkMcpServer {
     },
     async ({ invoice, challenge_id, macaroon }) => {
       // Pay the Lightning invoice
-      const result = await rln.sendPayment(invoice)
+      const result = await account.sendPayment({ invoice })
 
       // Attempt to extract preimage: RLN may return it as payment_secret
-      // (Lightning preimage is also called "payment secret" in some implementations)
-      const preimage = (result as Record<string, unknown>).payment_preimage as string | undefined
-        ?? (result as Record<string, unknown>).payment_secret as string | undefined
+      const preimage = (result as any).payment_preimage ?? (result as any).payment_secret
 
-      // Build MPP credential — works with or without preimage
+      // Build MPP credential
       const credential: Record<string, string> = { method: 'lightning' }
       if (challenge_id) credential.challenge_id = challenge_id
       if (preimage) credential.preimage = preimage
@@ -579,6 +585,3 @@ export function createServer(nodeUrl: string): WdkMcpServer {
 function text(content: string) {
   return { content: [{ type: 'text' as const, text: content }] }
 }
-
-// Re-export WdkMcpServer type so callers don't need the raw MCP SDK
-export type { WdkMcpServer }

@@ -2,6 +2,8 @@
   "name": "wdk-wallet-rln-mcp",
   "version": "1.1.0",
   "description": "MCP server exposing WDK RLN wallet tools (balances, invoices, payments, channels) to AI agents",
+  "author": "KaleidoSwap",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "bin": {
@@ -20,8 +22,8 @@
     "test": "npm run test:contract"
   },
   "dependencies": {
+    "@kaleidoswap/wdk-wallet-rln": "file:../wdk-wallet-rln",
     "@modelcontextprotocol/sdk": "^1.10.1",
-    "@tetherto/wdk-mcp-toolkit": "github:tetherto/wdk-mcp-toolkit",
     "zod": "^3.24.2"
   },
   "devDependencies": {
