@@ -32,6 +32,7 @@ Provides full wallet control: balances, RGB invoices, Lightning payments, channe
 |------|-------------|
 | `wdk_list_channels` | All channels: capacity, outbound/inbound balance, usability, RGB asset |
 | `wdk_open_channel` | Open a new channel, optionally with RGB asset allocation |
+| `wdk_connect_peer` | Connect to a Lightning peer (`pubkey@host:port`) — required before requesting an LSPS1 channel if the LSP isn't already a connected peer |
 
 ### Transfers & Payments History
 
@@ -47,6 +48,12 @@ Provides full wallet control: balances, RGB invoices, Lightning payments, channe
 | `wdk_atomic_taker` | Step 2 of atomic swap — whitelist HTLC on node before execute |
 | `wdk_list_swaps` | List all atomic swaps on the node |
 | `wdk_get_swap` | Get atomic swap state by `payment_hash` |
+
+### MPP (Machine Payments Protocol)
+
+| Tool | Description |
+|------|-------------|
+| `wdk_mpp_pay` | Pay an MPP Lightning challenge from the RLN wallet; returns a credential JSON for `mpp_submit_credential` (mpp-gateway domain) |
 
 ## Atomic Swap Flow
 
