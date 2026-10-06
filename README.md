@@ -1,5 +1,10 @@
 # wdk-wallet-rln-mcp
 
+> [!IMPORTANT]
+> **This repository is archived.** All of its tools now ship in the unified
+> [**kaleido-mcp**](https://github.com/kaleidoswap/kaleido-mcp) server (0.3.0+), together with
+> KaleidoSwap DEX, RLN, Spark, Liquid and MPP/L402 tools. Use `npx -y kaleido-mcp` instead.
+
 MCP server that exposes an [RGB Lightning Node (RLN)](https://github.com/RGB-Tools/rgb-lightning-node) wallet to AI agents via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 Provides full wallet control: balances, RGB invoices, Lightning payments, channel management, and atomic swap taker support.
