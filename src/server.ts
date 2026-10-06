@@ -1,9 +1,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { RlnAccount } from '@kaleidorg/wdk-wallet-rln'
+import { HttpClient } from 'kaleido-sdk'
+import { RlnClient } from 'kaleido-sdk/rln'
 
 export function createServer(nodeUrl: string): McpServer {
   const account = new (RlnAccount as any)(nodeUrl)
+  // RlnAccount does not wrap issuance / UTXO creation yet — talk to the node API directly.
+  const rln = new RlnClient(new HttpClient({ nodeUrl: nodeUrl.replace(/\/$/, '') }))
 
   const server = new McpServer({
     name: 'wdk-wallet-rln',
@@ -465,6 +469,160 @@ export function createServer(nodeUrl: string): McpServer {
   )
 
   // -----------------------------------------------------------------------
+  // Tool: wdk_create_utxos
+  // -----------------------------------------------------------------------
+  server.tool(
+    'wdk_create_utxos',
+    'Create colorable UTXOs on the node. RGB issuance, RGB invoices and asset channels each need free colored UTXOs; call this first on a fresh node or when an RGB call fails with "no available UTXOs". Spends a small amount of on-chain BTC.',
+    {
+      num: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Number of UTXOs to create (default: node decides, typically 5)'),
+      size: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Size of each UTXO in sats (default: node decides)'),
+      up_to: z
+        .boolean()
+        .optional()
+        .describe('If true, only create enough UTXOs to reach `num` free ones (default: false)'),
+      fee_rate: z
+        .number()
+        .positive()
+        .optional()
+        .describe('On-chain fee rate in sat/vbyte (default: 1)'),
+    },
+    async ({ num, size, up_to = false, fee_rate = 1 }) => {
+      await rln.createUtxos({ up_to, num, size, fee_rate, skip_sync: false })
+      return text(
+        JSON.stringify(
+          { created: true, note: 'Colored UTXOs are ready once the funding tx confirms' },
+          null,
+          2
+        )
+      )
+    }
+  )
+
+  // -----------------------------------------------------------------------
+  // Tool: wdk_issue_asset
+  // -----------------------------------------------------------------------
+  server.tool(
+    'wdk_issue_asset',
+    'Issue a new RGB asset owned by this node. schema "NIA" = fungible token with a ticker (e.g. an event or loyalty token), "CFA" = fungible collectible without ticker, "UDA" = unique digital asset / NFT (supply 1). Requires free colored UTXOs (see wdk_create_utxos). Returns the new asset_id.',
+    {
+      schema: z
+        .enum(['NIA', 'CFA', 'UDA'])
+        .optional()
+        .describe('Asset schema (default: NIA)'),
+      name: z.string().min(1).describe('Asset name, e.g. "Hackathon Ticket"'),
+      ticker: z
+        .string()
+        .regex(/^[A-Z0-9]{1,8}$/)
+        .optional()
+        .describe('Uppercase ticker, e.g. "TICKET". Required for NIA and UDA, ignored for CFA.'),
+      amount: z
+        .number()
+        .positive()
+        .optional()
+        .describe('Total supply in display units (e.g. 1000). Required for NIA and CFA; UDA always has supply 1.'),
+      precision: z
+        .number()
+        .int()
+        .min(0)
+        .max(18)
+        .optional()
+        .describe('Decimal places (default: 0). Raw supply = amount × 10^precision.'),
+      details: z
+        .string()
+        .optional()
+        .describe('Optional free-text description (CFA and UDA only)'),
+    },
+    async ({ schema = 'NIA', name, ticker, amount, precision = 0, details }) => {
+      if (schema !== 'CFA' && !ticker) {
+        return fail(`ticker is required for ${schema}`)
+      }
+
+      let result: { asset?: any }
+      let rawAmount = 1
+      if (schema === 'UDA') {
+        result = await rln.issueAssetUDA({
+          ticker: ticker!,
+          name,
+          details: details ?? null,
+          precision,
+          media_file_digest: null,
+          attachments_file_digests: [],
+        })
+      } else {
+        if (amount === undefined) {
+          return fail(`amount is required for ${schema}`)
+        }
+        rawAmount = Math.round(amount * Math.pow(10, precision))
+        if (!Number.isSafeInteger(rawAmount) || rawAmount <= 0) {
+          return fail('amount × 10^precision must be a positive safe integer')
+        }
+        result =
+          schema === 'NIA'
+            ? await rln.issueAssetNIA({ amounts: [rawAmount], ticker: ticker!, name, precision })
+            : await rln.issueAssetCFA({ amounts: [rawAmount], name, details: details ?? null, precision })
+      }
+
+      const asset = result.asset ?? {}
+      return text(
+        JSON.stringify(
+          {
+            issued: true,
+            schema,
+            asset_id: asset.asset_id ?? null,
+            name: asset.name ?? name,
+            ticker: asset.ticker ?? ticker ?? null,
+            precision: asset.precision ?? precision,
+            issued_supply_raw: asset.issued_supply ?? rawAmount,
+          },
+          null,
+          2
+        )
+      )
+    }
+  )
+
+  // -----------------------------------------------------------------------
+  // Tool: wdk_list_transfers
+  // -----------------------------------------------------------------------
+  server.tool(
+    'wdk_list_transfers',
+    'List RGB transfers for one asset (issuance, sends, receives) with their status (WaitingCounterparty, WaitingConfirmations, Settled, Failed). Use it to check whether an RGB invoice has been paid.',
+    {
+      asset_id: z.string().describe('RGB asset ID'),
+    },
+    async ({ asset_id }) => {
+      const { transfers } = await rln.listTransfers({ asset_id })
+      return text(
+        JSON.stringify(
+          (transfers ?? []).map((t: any) => ({
+            idx: t.idx,
+            kind: t.kind,
+            status: t.status,
+            amount_raw: t.requested_assignment?.value ?? t.assignments?.[0]?.value ?? null,
+            txid: t.txid ?? null,
+            recipient_id: t.recipient_id ?? null,
+            created_at: t.created_at,
+            updated_at: t.updated_at,
+          })),
+          null,
+          2
+        )
+      )
+    }
+  )
+
+  // -----------------------------------------------------------------------
   // Tool: wdk_connect_peer
   // -----------------------------------------------------------------------
   server.tool(
@@ -584,4 +742,8 @@ export function createServer(nodeUrl: string): McpServer {
 
 function text(content: string) {
   return { content: [{ type: 'text' as const, text: content }] }
+}
+
+function fail(message: string) {
+  return { ...text(JSON.stringify({ error: message }, null, 2)), isError: true }
 }

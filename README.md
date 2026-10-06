@@ -40,6 +40,16 @@ Provides full wallet control: balances, RGB invoices, Lightning payments, channe
 |------|-------------|
 | `wdk_list_payments` | Recent Lightning payments (sent and received) |
 | `wdk_refresh_transfers` | Flush pending RGB asset transfers |
+| `wdk_list_transfers` | RGB transfers for one asset with status — check if an RGB invoice was paid |
+
+### RGB Issuance
+
+| Tool | Description |
+|------|-------------|
+| `wdk_create_utxos` | Create colorable UTXOs — needed before issuing, invoicing RGB, or opening asset channels |
+| `wdk_issue_asset` | Issue a new RGB asset: `NIA` (fungible token with ticker), `CFA` (collectible fungible), `UDA` (unique / NFT). Amount in display units, converted with `precision` |
+
+Typical flow on a fresh regtest node: `wdk_get_address` → fund it → `wdk_create_utxos` → `wdk_issue_asset { name: "Hackathon Ticket", ticker: "TICKET", amount: 1000 }` → `wdk_create_rgb_invoice` / `wdk_send_asset`.
 
 ### Atomic Swap Taker
 
